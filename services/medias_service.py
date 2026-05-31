@@ -97,7 +97,6 @@ class MediasService:
             'cover': media.cover_url,
             'banner': media.banner_url,
             'synopsis': media.description,
-            'genres': [],
             'release_date': media.release_date.isoformat() if media.release_date else None,
             'average_rating': media.average_rating,
             'total_reviews': total_reviews,
