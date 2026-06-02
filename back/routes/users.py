@@ -119,3 +119,4 @@ def refuse_friend_request(username, request_id):
         return jsonify({'error': 'Friend request not found'}), 404
 
     return jsonify({'status': 'refused'})
+
