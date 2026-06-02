@@ -6,7 +6,7 @@ from schemas.models import User, Friend, MediaRelationType, RelatedMedia, MediaT
 from routes import api_bp
 from flask import jsonify, request
 from services.imdb_service import MovieAPIService
-from routes.users import users_bp
+from routes.auth import auth_bp
 
 
 movie_api = MovieAPIService()
@@ -20,7 +20,7 @@ def create_app():
     Migrate(app, db)
     app.register_blueprint(api_bp, url_prefix='/api')
 
-    app.register_blueprint(users_bp)
+    app.register_blueprint(auth_bp)
 
     return app
 
