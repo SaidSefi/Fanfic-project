@@ -1,20 +1,196 @@
 import uuid
+from datetime import datetime
+from typing import TypedDict, List, Union, Any
+
 from sqlalchemy import or_, func
 
-from datetime import datetime
-
 from schemas.db import db
-from schemas.models import User, Friend, UserTopItem, Media, MediaType, CustomList, ListItem, RelatedMedia, MediaRelationType, UserMedia
+from schemas.models import (
+    User, Friend, UserTopItem, Media, MediaType,
+    CustomList, ListItem, RelatedMedia, MediaRelationType, UserMedia
+)
 
+
+# ── TypedDicts ──────────────────────────────────────────────
+
+class HealthDict(TypedDict):
+    status: str
+    message: str
+
+
+class ListPageDict(TypedDict):
+    nom: str
+    description: str | None
+    cover: str | None
+    contenu: List[dict[str, Any]]
+
+
+class UserListSummaryDict(TypedDict):
+    id: str
+    nom: str
+    description: str | None
+    cover: str | None
+    nombre_elements: int
+    created_at: str | None
+
+
+class CreateListPayloadDict(TypedDict):
+    title: str
+    description: str | None
+    visibility: str
+
+
+class UpdateListPayloadDict(TypedDict, total=False):
+    title: str
+    description: str | None
+    visibility: str
+
+
+class AddListItemPayloadDict(TypedDict):
+    media_id: str
+    position: int | None
+
+
+class AddedListItemDict(TypedDict):
+    id: str
+    list_id: str
+    media_id: str
+    position: int
+
+
+class UpdatedPositionDict(TypedDict):
+    id: str
+    position: int
+
+
+class UserProfileDict(TypedDict):
+    username: str
+    avatar: str | None
+    bio: str | None
+    joined_at: str | None
+    followers_count: int
+    following_count: int
+
+
+class UpdateProfilePayloadDict(TypedDict, total=False):
+    username: str
+    avatar_url: str | None
+    bio: str | None
+
+
+class FriendRequestCreatedDict(TypedDict):
+    status: str
+    requester: str
+    addressee: str
+
+
+class FriendRequestCreatedWithIdDict(TypedDict):
+    status: str
+    request_id: str
+    requester: str
+    addressee: str
+
+
+class IncomingRequestDict(TypedDict):
+    status: str
+
+
+class FriendRequestAcceptedDict(TypedDict):
+    status: str
+    request_id: str
+
+
+class FriendDict(TypedDict):
+    username: str
+    avatar: str | None
+    activite_recent: str | None
+
+
+class FriendRequestDict(TypedDict):
+    request_id: str
+    sender: str
+    avatar: str | None
+
+
+class TopMediaDict(TypedDict):
+    cover: str | None
+    nom: str
+    rating: float
+    type: str
+
+
+class MediaSummaryDict(TypedDict):
+    titre: str
+    image: str | None
+    score: float
+    type: str
+
+
+class MediaDetailDict(TypedDict):
+    titre: str
+    cover: str | None
+    banner: str | None
+    synopsis: str | None
+    release_date: str | None
+    average_rating: float
+    total_reviews: int
+    type: str | None
+
+
+class MediaReviewDict(TypedDict):
+    user: str
+    review: str | None
+    rating: float | None
+    created_at: str | None
+
+
+class MediaTypeDict(TypedDict):
+    type: str
+
+
+class RelatedMediaDict(TypedDict):
+    cover: str | None
+    nom: str
+
+
+class RelationTypeDict(TypedDict):
+    type: str | None
+
+
+class UserMediaItemDict(TypedDict):
+    media_name: str
+    image: str | None
+    status: str
+    rating: float | None
+    updated_at: str
+
+
+class UserMediaReviewDict(TypedDict):
+    user_id: str
+    media_id: str
+    review: str | None
+    rating: float | None
+    created_at: str | None
+
+
+class UpdateUserMediaPayloadDict(TypedDict, total=False):
+    status: str
+    rating: float
+    review_text: str
+
+
+# ── BaseService ─────────────────────────────────────────────
 
 class BaseService:
-    def health_check(self):
+    def health_check(self) -> HealthDict:
         return {
             'status': 'ok',
             'message': 'Fanfic API is ready'
         }
 
-    def get_list_page(self, list_id):
+    # ── Lists ────────────────────────────────────────────
+
+    def get_list_page(self, list_id: str) -> ListPageDict | None:
         custom_list = CustomList.query.filter_by(id=list_id).first()
         if not custom_list:
             return None
@@ -44,7 +220,7 @@ class BaseService:
             ],
         }
 
-    def get_user_lists(self, user_id):
+    def get_user_lists(self, user_id: str) -> List[UserListSummaryDict] | None:
         user = User.query.filter_by(id=user_id).first()
         if not user:
             return None
@@ -68,7 +244,9 @@ class BaseService:
             for custom_list in lists
         ]
 
-    def create_list(self, user_id, payload):
+    def create_list(
+        self, user_id: str, payload: CreateListPayloadDict
+    ) -> Union[UserListSummaryDict, str]:
         user = User.query.filter_by(id=user_id).first()
         if not user:
             return 'user_not_found'
@@ -96,7 +274,9 @@ class BaseService:
             'created_at': custom_list.created_at.isoformat() if custom_list.created_at else None,
         }
 
-    def update_list(self, list_id, payload):
+    def update_list(
+        self, list_id: str, payload: UpdateListPayloadDict
+    ) -> Union[UserListSummaryDict, str]:
         custom_list = CustomList.query.filter_by(id=list_id).first()
         if not custom_list:
             return 'list_not_found'
@@ -127,7 +307,7 @@ class BaseService:
             'created_at': custom_list.created_at.isoformat() if custom_list.created_at else None,
         }
 
-    def delete_list(self, list_id):
+    def delete_list(self, list_id: str) -> Union[bool, str]:
         custom_list = CustomList.query.filter_by(id=list_id).first()
         if not custom_list:
             return 'list_not_found'
@@ -137,7 +317,9 @@ class BaseService:
 
         return True
 
-    def add_list_item(self, list_id, payload):
+    def add_list_item(
+        self, list_id: str, payload: AddListItemPayloadDict
+    ) -> Union[AddedListItemDict, str]:
         custom_list = CustomList.query.filter_by(id=list_id).first()
         if not custom_list:
             return 'list_not_found'
@@ -175,7 +357,9 @@ class BaseService:
             'position': list_item.position,
         }
 
-    def update_list_item_position(self, list_id, item_id, position):
+    def update_list_item_position(
+        self, list_id: str, item_id: str, position: int
+    ) -> Union[UpdatedPositionDict, str]:
         custom_list = CustomList.query.filter_by(id=list_id).first()
         if not custom_list:
             return 'list_not_found'
@@ -192,7 +376,7 @@ class BaseService:
             'position': list_item.position,
         }
 
-    def remove_list_item(self, list_id, item_id):
+    def remove_list_item(self, list_id: str, item_id: str) -> Union[bool, str]:
         custom_list = CustomList.query.filter_by(id=list_id).first()
         if not custom_list:
             return 'list_not_found'
@@ -206,7 +390,11 @@ class BaseService:
 
         return True
 
-    def update_user_profile(self, username, payload):
+    # ── User Profile ─────────────────────────────────────
+
+    def update_user_profile(
+        self, username: str, payload: UpdateProfilePayloadDict
+    ) -> Union[UserProfileDict, str, None]:
         user = User.query.filter_by(username=username).first()
         if not user:
             return None
@@ -227,7 +415,11 @@ class BaseService:
 
         return self.get_user_profile(user.username)
 
-    def add_friend(self, requester_username, addressee_username):
+    # ── Friends ──────────────────────────────────────────
+
+    def add_friend(
+        self, requester_username: str, addressee_username: str
+    ) -> Union[FriendRequestCreatedDict, IncomingRequestDict, str]:
         requester = User.query.filter_by(username=requester_username).first()
         addressee = User.query.filter_by(username=addressee_username).first()
         if not requester or not addressee:
@@ -261,7 +453,7 @@ class BaseService:
             'addressee': addressee.username,
         }
 
-    def remove_friend(self, username, friend_username):
+    def remove_friend(self, username: str, friend_username: str) -> Union[bool, str]:
         user = User.query.filter_by(username=username).first()
         friend_user = User.query.filter_by(username=friend_username).first()
         if not user or not friend_user:
@@ -282,7 +474,7 @@ class BaseService:
 
         return True
 
-    def get_friends(self, user_id):
+    def get_friends(self, user_id: str) -> List[FriendDict] | None:
         user = User.query.filter_by(id=user_id).first()
         if not user:
             return None
@@ -294,14 +486,13 @@ class BaseService:
             )
         ).all()
 
-        result = []
+        result: List[FriendDict] = []
         for f in friendships:
             other_id = f.addressee_id if f.requester_id == user_id else f.requester_id
             other = User.query.filter_by(id=other_id).first()
             if not other:
                 continue
 
-            # recent activity: latest review_created_at or added_at
             latest = (
                 UserMedia.query.filter_by(user_id=other.id)
                 .order_by(UserMedia.review_created_at.desc())
@@ -319,7 +510,7 @@ class BaseService:
 
         return result
 
-    def get_friend_requests(self, user_id):
+    def get_friend_requests(self, user_id: str) -> List[FriendRequestDict] | None:
         user = User.query.filter_by(id=user_id).first()
         if not user:
             return None
@@ -334,7 +525,9 @@ class BaseService:
             for r in reqs
         ]
 
-    def add_friend_request(self, addressee_id, sender_id):
+    def add_friend_request(
+        self, addressee_id: str, sender_id: str
+    ) -> Union[FriendRequestCreatedWithIdDict, IncomingRequestDict, str]:
         addressee = User.query.filter_by(id=addressee_id).first()
         sender = User.query.filter_by(id=sender_id).first()
         if not addressee or not sender:
@@ -369,7 +562,9 @@ class BaseService:
             'addressee': addressee.username,
         }
 
-    def accept_friend_request(self, addressee_id, request_id):
+    def accept_friend_request(
+        self, addressee_id: str, request_id: str
+    ) -> Union[FriendRequestAcceptedDict, str]:
         fr = Friend.query.filter_by(id=request_id, addressee_id=addressee_id).first()
         if not fr:
             return 'request_not_found'
@@ -382,7 +577,9 @@ class BaseService:
 
         return {'status': 'accepted', 'request_id': fr.id}
 
-    def refuse_friend_request(self, addressee_id, request_id):
+    def refuse_friend_request(
+        self, addressee_id: str, request_id: str
+    ) -> Union[bool, str]:
         fr = Friend.query.filter_by(id=request_id, addressee_id=addressee_id).first()
         if not fr:
             return 'request_not_found'
@@ -392,7 +589,7 @@ class BaseService:
 
         return True
 
-    def remove_friend_by_id(self, user_id, friend_id):
+    def remove_friend_by_id(self, user_id: str, friend_id: str) -> Union[bool, str]:
         friendship = Friend.query.filter(
             or_(
                 (Friend.requester_id == user_id) & (Friend.addressee_id == friend_id),
@@ -408,7 +605,7 @@ class BaseService:
 
         return True
 
-    def get_user_profile(self, username):
+    def get_user_profile(self, username: str) -> UserProfileDict | None:
         user = User.query.filter_by(username=username).first()
         if not user:
             return None
@@ -425,7 +622,7 @@ class BaseService:
             'following_count': following_count,
         }
 
-    def get_user_top_medias(self, username):
+    def get_user_top_medias(self, username: str) -> List[TopMediaDict] | None:
         user = User.query.filter_by(username=username).first()
         if not user:
             return None
@@ -449,7 +646,14 @@ class BaseService:
             for _, media, media_type in top_items
         ]
 
-    def get_medias(self, ids=None, genre=None, year=None, popularity=None, rating=None):
+    def get_medias(
+        self,
+        ids: List[str] | None = None,
+        genre: str | None = None,
+        year: str | None = None,
+        popularity: str | None = None,
+        rating: str | None = None,
+    ) -> List[MediaSummaryDict]:
         query = db.session.query(Media, MediaType).join(MediaType, Media.media_type == MediaType.id)
 
         if ids:
@@ -496,7 +700,7 @@ class BaseService:
             for media, media_type in items
         ]
 
-    def search_medias(self, query_text):
+    def search_medias(self, query_text: str) -> List[MediaSummaryDict]:
         medias = (
             db.session.query(Media, MediaType)
             .join(MediaType, Media.media_type == MediaType.id)
@@ -519,7 +723,9 @@ class BaseService:
             for media, media_type in medias
         ]
 
-    def get_user_medias(self, user_id, status=None):
+    def get_user_medias(
+        self, user_id: str, status: str | None = None
+    ) -> List[UserMediaItemDict] | None:
         user = User.query.filter_by(id=user_id).first()
         if not user:
             return None
@@ -536,13 +742,12 @@ class BaseService:
                 'image': media.cover_url,
                 'status': user_media.status,
                 'rating': user_media.rating,
-                'progress': self._derive_progress(user_media.status),
                 'updated_at': user_media.review_created_at.isoformat() if user_media.review_created_at else user_media.added_at.isoformat(),
             }
             for user_media, media in items
         ]
 
-    def get_user_media(self, user_id, media_id):
+    def get_user_media(self, user_id: str, media_id: str) -> UserMediaItemDict | None:
         result = (
             db.session.query(UserMedia, Media)
             .join(Media, UserMedia.media_id == Media.id)
@@ -558,11 +763,12 @@ class BaseService:
             'image': media.cover_url,
             'status': user_media.status,
             'rating': user_media.rating,
-            'progress': self._derive_progress(user_media.status),
             'updated_at': user_media.review_created_at.isoformat() if user_media.review_created_at else user_media.added_at.isoformat(),
         }
 
-    def update_user_media(self, user_id, media_id, payload):
+    def update_user_media(
+        self, user_id: str, media_id: str, payload: UpdateUserMediaPayloadDict
+    ) -> Union[UserMediaItemDict, str]:
         item = UserMedia.query.filter_by(user_id=user_id, media_id=media_id).first()
         if not item:
             return 'user_media_not_found'
@@ -581,11 +787,10 @@ class BaseService:
             'media_name': item.media.title,
             'status': item.status,
             'rating': item.rating,
-            'progress': self._derive_progress(item.status),
             'updated_at': item.review_created_at.isoformat() if item.review_created_at else item.added_at.isoformat(),
         }
 
-    def delete_user_media(self, user_id, media_id):
+    def delete_user_media(self, user_id: str, media_id: str) -> Union[bool, str]:
         item = UserMedia.query.filter_by(user_id=user_id, media_id=media_id).first()
         if not item:
             return 'user_media_not_found'
@@ -595,18 +800,7 @@ class BaseService:
 
         return True
 
-    def _derive_progress(self, status):
-        if status == 'completed' or status == 'watched':
-            return 100
-        if status == 'playing':
-            return 50
-        if status == 'dropped':
-            return 0
-        if status == 'planned':
-            return 0
-        return None
-
-    def get_media(self, media_id):
+    def get_media(self, media_id: str) -> MediaDetailDict | None:
         media = Media.query.filter_by(id=media_id).first()
         if not media:
             return None
@@ -633,7 +827,7 @@ class BaseService:
             'type': media_type.name if media_type else None,
         }
 
-    def get_media_reviews(self, media_id):
+    def get_media_reviews(self, media_id: str) -> List[MediaReviewDict] | None:
         media = Media.query.filter_by(id=media_id).first()
         if not media:
             return None
@@ -656,7 +850,7 @@ class BaseService:
             for review in reviews
         ]
 
-    def get_media_type(self, media_id):
+    def get_media_type(self, media_id: str) -> MediaTypeDict | None:
         media = Media.query.filter_by(id=media_id).first()
         if not media:
             return None
@@ -667,7 +861,7 @@ class BaseService:
 
         return {'type': media_type.name}
 
-    def get_media_related(self, media_id):
+    def get_media_related(self, media_id: str) -> List[RelatedMediaDict] | None:
         media = Media.query.filter_by(id=media_id).first()
         if not media:
             return None
@@ -690,7 +884,7 @@ class BaseService:
             for related_media in related
         ]
 
-    def get_media_relation_type(self, media_id):
+    def get_media_relation_type(self, media_id: str) -> RelationTypeDict | None:
         media = Media.query.filter_by(id=media_id).first()
         if not media:
             return None
@@ -702,7 +896,9 @@ class BaseService:
         relation_type = MediaRelationType.query.filter_by(id=related_model.media_relation_type_id).first()
         return {'type': relation_type.name if relation_type else None}
 
-    def add_media_review(self, media_id, payload):
+    def add_media_review(
+        self, media_id: str, payload: dict[str, Any]
+    ) -> Union[dict[str, Any], str]:
         media = Media.query.filter_by(id=media_id).first()
         if not media:
             return 'media_not_found'
@@ -734,7 +930,9 @@ class BaseService:
             'created_at': user_media.review_created_at.isoformat(),
         }
 
-    def add_media_to_library(self, media_id, payload):
+    def add_media_to_library(
+        self, media_id: str, payload: dict[str, Any]
+    ) -> Union[dict[str, Any], str]:
         media = Media.query.filter_by(id=media_id).first()
         if not media:
             return 'media_not_found'

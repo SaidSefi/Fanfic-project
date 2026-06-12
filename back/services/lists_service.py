@@ -1,32 +1,134 @@
 import uuid
-from datetime import datetime
+from typing import TypedDict, List, Union
 
 from schemas.db import db
 from schemas.models import User, CustomList, ListItem, Media
 
 
+class ListSummaryDict(TypedDict):
+    id: str
+    nom: str
+    description: str | None
+    cover: str | None
+    total_items: int
+    visibility: str
+    created_at: str | None
+
+
+class UserListSummaryDict(TypedDict):
+    id: str
+    nom: str
+    description: str | None
+    cover: str | None
+    nombre_elements: int
+    created_at: str | None
+
+
+class ListItemDict(TypedDict):
+    id: str
+    media_id: str
+    media_name: str
+    image: str | None
+    note: float
+    position: int
+
+
+class PaginatedListItemsDict(TypedDict):
+    items: List[ListItemDict]
+    page: int
+    per_page: int
+    total_items: int
+    total_pages: int
+
+
+class ListPageDict(TypedDict):
+    nom: str
+    description: str | None
+    cover: str | None
+    contenu: List[ListItemDict]
+
+
+class CreateListPayloadDict(TypedDict):
+    title: str
+    description: str | None
+    visibility: str
+
+
+class UpdateListPayloadDict(TypedDict, total=False):
+    title: str
+    description: str | None
+    visibility: str
+
+
+class AddListItemPayloadDict(TypedDict):
+    media_id: str
+    position: int | None
+
+
+class AddedListItemDict(TypedDict):
+    id: str
+    list_id: str
+    media_id: str
+    position: int
+
+
+class UpdatedPositionDict(TypedDict):
+    id: str
+    position: int
+
+
 class ListsService:
-    def get_list_page(self, list_id):
+    def get_list(self, list_id: str) -> ListSummaryDict | None:
         custom_list = CustomList.query.filter_by(id=list_id).first()
         if not custom_list:
             return None
 
+        total_items = ListItem.query.filter_by(list_id=custom_list.id).count()
+
+        cover = (
+            db.session.query(Media.cover_url)
+            .join(ListItem, ListItem.media_id == Media.id)
+            .filter(ListItem.list_id == custom_list.id)
+            .order_by(ListItem.position)
+            .scalar()
+        )
+
+        return {
+            'id': custom_list.id,
+            'nom': custom_list.title,
+            'description': custom_list.description,
+            'cover': cover,
+            'total_items': total_items,
+            'visibility': custom_list.visibility,
+            'created_at': custom_list.created_at.isoformat() if custom_list.created_at else None,
+        }
+
+    def get_list_items(
+        self, list_id: str, page: int = 1, per_page: int = 20
+    ) -> PaginatedListItemsDict | None:
+        custom_list = CustomList.query.filter_by(id=list_id).first()
+        if not custom_list:
+            return None
+
+        total_items = ListItem.query.filter_by(list_id=custom_list.id).count()
+        total_pages = max(1, (total_items + per_page - 1) // per_page)
+
+        offset = (page - 1) * per_page
         items = (
             db.session.query(ListItem, Media)
             .join(Media, ListItem.media_id == Media.id)
             .filter(ListItem.list_id == custom_list.id)
             .order_by(ListItem.position)
+            .offset(offset)
+            .limit(per_page)
             .all()
         )
 
-        cover = items[0][1].cover_url if items else None
         return {
-            'nom': custom_list.title,
-            'description': custom_list.description,
-            'cover': cover,
-            'contenu': [
+            'items': [
                 {
                     'id': item.id,
+                    'media_id': media.id,
                     'media_name': media.title,
                     'image': media.cover_url,
                     'note': media.average_rating,
@@ -34,9 +136,13 @@ class ListsService:
                 }
                 for item, media in items
             ],
+            'page': page,
+            'per_page': per_page,
+            'total_items': total_items,
+            'total_pages': total_pages,
         }
 
-    def get_user_lists(self, user_id):
+    def get_user_lists(self, user_id: str) -> List[UserListSummaryDict] | None:
         user = User.query.filter_by(id=user_id).first()
         if not user:
             return None
@@ -60,7 +166,9 @@ class ListsService:
             for custom_list in lists
         ]
 
-    def create_list(self, user_id, payload):
+    def create_list(
+        self, user_id: str, payload: CreateListPayloadDict
+    ) -> Union[UserListSummaryDict, str]:
         user = User.query.filter_by(id=user_id).first()
         if not user:
             return 'user_not_found'
@@ -88,7 +196,9 @@ class ListsService:
             'created_at': custom_list.created_at.isoformat() if custom_list.created_at else None,
         }
 
-    def update_list(self, list_id, payload):
+    def update_list(
+        self, list_id: str, payload: UpdateListPayloadDict
+    ) -> Union[UserListSummaryDict, str]:
         custom_list = CustomList.query.filter_by(id=list_id).first()
         if not custom_list:
             return 'list_not_found'
@@ -119,7 +229,7 @@ class ListsService:
             'created_at': custom_list.created_at.isoformat() if custom_list.created_at else None,
         }
 
-    def delete_list(self, list_id):
+    def delete_list(self, list_id: str) -> Union[bool, str]:
         custom_list = CustomList.query.filter_by(id=list_id).first()
         if not custom_list:
             return 'list_not_found'
@@ -129,7 +239,9 @@ class ListsService:
 
         return True
 
-    def add_list_item(self, list_id, payload):
+    def add_list_item(
+        self, list_id: str, payload: AddListItemPayloadDict
+    ) -> Union[AddedListItemDict, str]:
         custom_list = CustomList.query.filter_by(id=list_id).first()
         if not custom_list:
             return 'list_not_found'
@@ -143,7 +255,16 @@ class ListsService:
             return 'media_not_found'
 
         position = payload.get('position')
-        if position is None:
+        if position is not None:
+            # Shift existing items at or after this position down by 1
+            ListItem.query.filter(
+                ListItem.list_id == custom_list.id,
+                ListItem.position >= position
+            ).update(
+                {ListItem.position: ListItem.position + 1},
+                synchronize_session=False
+            )
+        else:
             max_position = (
                 db.session.query(db.func.max(ListItem.position))
                 .filter(ListItem.list_id == custom_list.id)
@@ -167,7 +288,9 @@ class ListsService:
             'position': list_item.position,
         }
 
-    def update_list_item_position(self, list_id, item_id, position):
+    def update_list_item_position(
+        self, list_id: str, item_id: str, position: int
+    ) -> Union[UpdatedPositionDict, str]:
         custom_list = CustomList.query.filter_by(id=list_id).first()
         if not custom_list:
             return 'list_not_found'
@@ -176,7 +299,32 @@ class ListsService:
         if not list_item:
             return 'item_not_found'
 
-        list_item.position = position
+        old_position = list_item.position
+
+        if old_position != position:
+            if old_position < position:
+                # Moving down: shift items between old+1 and new position up by 1
+                ListItem.query.filter(
+                    ListItem.list_id == custom_list.id,
+                    ListItem.position > old_position,
+                    ListItem.position <= position
+                ).update(
+                    {ListItem.position: ListItem.position - 1},
+                    synchronize_session=False
+                )
+            else:
+                # Moving up: shift items between new and old-1 position down by 1
+                ListItem.query.filter(
+                    ListItem.list_id == custom_list.id,
+                    ListItem.position >= position,
+                    ListItem.position < old_position
+                ).update(
+                    {ListItem.position: ListItem.position + 1},
+                    synchronize_session=False
+                )
+
+            list_item.position = position
+
         db.session.commit()
 
         return {
@@ -184,7 +332,7 @@ class ListsService:
             'position': list_item.position,
         }
 
-    def remove_list_item(self, list_id, item_id):
+    def remove_list_item(self, list_id: str, item_id: str) -> Union[bool, str]:
         custom_list = CustomList.query.filter_by(id=list_id).first()
         if not custom_list:
             return 'list_not_found'
@@ -193,7 +341,18 @@ class ListsService:
         if not list_item:
             return 'item_not_found'
 
+        removed_position = list_item.position
         db.session.delete(list_item)
+
+        # Close the gap: shift items after the removed position up by 1
+        ListItem.query.filter(
+            ListItem.list_id == custom_list.id,
+            ListItem.position > removed_position
+        ).update(
+            {ListItem.position: ListItem.position - 1},
+            synchronize_session=False
+        )
+
         db.session.commit()
 
         return True

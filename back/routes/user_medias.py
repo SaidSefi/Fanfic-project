@@ -40,10 +40,15 @@ def update_user_media(user_id, media_id):
     if not payload:
         return jsonify({'error': 'Invalid JSON payload'}), 400
 
-    result = service.update_user_media(user_id, media_id, payload)
-    if result == 'user_media_not_found':
-        return jsonify({'error': 'User media not found'}), 404
-
+    result = service.upsert_user_media(
+        user_id=user_id,
+        media_id=media_id,
+        status=payload.get('status'),
+        rating=payload.get('rating'),
+        liked=payload.get('liked'),
+        review_text=payload.get('review_text'),
+        consumed_at=payload.get('consumed_at'),
+    )
     return jsonify(result)
 
 
@@ -52,5 +57,18 @@ def delete_user_media(user_id, media_id):
     result = service.delete_user_media(user_id, media_id)
     if result == 'user_media_not_found':
         return jsonify({'error': 'User media not found'}), 404
+
+    return jsonify({'status': 'deleted'})
+
+
+@user_medias_bp.route('/<user_id>/medias/<media_id>/review', methods=['DELETE'])
+def delete_user_media_review(user_id, media_id):
+    result = service.delete_user_media_review(user_id, media_id)
+    if result == 'user_not_found':
+        return jsonify({'error': 'User not found'}), 404
+    if result == 'media_not_found':
+        return jsonify({'error': 'Media not found'}), 404
+    if result == 'review_not_found':
+        return jsonify({'error': 'No review found'}), 404
 
     return jsonify({'status': 'deleted'})

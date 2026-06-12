@@ -27,11 +27,21 @@ def create_list(user_id):
 
 
 @lists_bp.route('/lists/<list_id>', methods=['GET'])
-def get_list_page(list_id):
-    list_page = service.get_list_page(list_id)
-    if list_page is None:
+def get_list(list_id):
+    result = service.get_list(list_id)
+    if result is None:
         return jsonify({'error': 'List not found'}), 404
-    return jsonify(list_page)
+    return jsonify(result)
+
+
+@lists_bp.route('/lists/<list_id>/items', methods=['GET'])
+def get_list_items(list_id):
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    result = service.get_list_items(list_id, page=page, per_page=per_page)
+    if result is None:
+        return jsonify({'error': 'List not found'}), 404
+    return jsonify(result)
 
 
 @lists_bp.route('/lists/<list_id>', methods=['PUT'])

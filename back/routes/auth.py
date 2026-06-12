@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from services.auth_service import AuthService
 from utils.validators import verify_valid_username, verify_valid_email, verify_valid_password
+from utils.auth import create_access_token
 
 # On l'appelle auth_bp, ce sera notre auth_router
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
@@ -23,11 +24,25 @@ def signup():
 
     # 2. Appel au Service pour la logique métier
     try:
-        AuthService.register_user(username, email, password)
-        return jsonify({"message": "User registered successfully!"}), 201
+        new_user = AuthService.register_user(username, email, password)
+        # Auto-login: return token + user data so the frontend can log in immediately
+        token = create_access_token(data={"sub": new_user.id, "email": new_user.email})
+        return jsonify({
+            "message": "User registered successfully!",
+            "access_token": token,
+            "user": {
+                "id": new_user.id,
+                "username": new_user.username,
+                "email": new_user.email,
+                "bio": new_user.bio,
+                "avatar_url": new_user.avatar_url,
+                "created_at": new_user.created_at.isoformat() if new_user.created_at else None
+            }
+        }), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    except Exception:
+    except Exception as e:
+        print(f"Error occurred while registering user: {e}")
         return jsonify({"error": "An internal server error occurred"}), 500
 
 

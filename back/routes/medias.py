@@ -64,67 +64,6 @@ def search_medias():
     if not query_text:
         return jsonify({'error': 'q is required'}), 400
 
-    medias = service.search_medias(query_text)
+    media_type = request.args.get('type')
+    medias = service.search_medias(query_text, media_type)
     return jsonify(medias)
-
-
-@medias_bp.route('/<media_id>/reviews', methods=['POST'])
-def add_media_review(media_id):
-    payload = request.get_json(silent=True)
-    if not payload or 'username' not in payload or 'review_text' not in payload:
-        return jsonify({'error': 'username and review_text are required'}), 400
-
-    result = service.add_media_review(media_id, payload)
-    if result == 'media_not_found':
-        return jsonify({'error': 'Media not found'}), 404
-    if result == 'user_not_found':
-        return jsonify({'error': 'User not found'}), 404
-
-    return jsonify(result), 201
-
-
-@medias_bp.route('/<media_id>/library', methods=['POST'])
-def add_media_to_library(media_id):
-    payload = request.get_json(silent=True)
-    if not payload or 'username' not in payload:
-        return jsonify({'error': 'username is required'}), 400
-
-    result = service.add_media_to_library(media_id, payload)
-    if result == 'media_not_found':
-        return jsonify({'error': 'Media not found'}), 404
-    if result == 'user_not_found':
-        return jsonify({'error': 'User not found'}), 404
-
-    return jsonify(result), 201
-
-
-@medias_bp.route('/<media_id>/library', methods=['PUT'])
-def update_media_library(media_id):
-    payload = request.get_json(silent=True)
-    if not payload or 'username' not in payload:
-        return jsonify({'error': 'username is required'}), 400
-
-    result = service.update_media_library(media_id, payload)
-    if result == 'media_not_found':
-        return jsonify({'error': 'Media not found'}), 404
-    if result == 'user_not_found':
-        return jsonify({'error': 'User not found'}), 404
-
-    return jsonify(result)
-
-
-@medias_bp.route('/<media_id>/reviews', methods=['DELETE'])
-def delete_media_review(media_id):
-    payload = request.get_json(silent=True)
-    if not payload or 'username' not in payload:
-        return jsonify({'error': 'username is required'}), 400
-
-    result = service.delete_media_review(media_id, payload['username'])
-    if result == 'media_not_found':
-        return jsonify({'error': 'Media not found'}), 404
-    if result == 'user_not_found':
-        return jsonify({'error': 'User not found'}), 404
-    if result == 'review_not_found':
-        return jsonify({'error': 'Review not found'}), 404
-
-    return jsonify({'status': 'deleted'})

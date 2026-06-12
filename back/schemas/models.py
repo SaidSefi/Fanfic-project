@@ -16,6 +16,7 @@ class User(db.Model):
     likes = db.relationship('UserMediaLike', backref='user', lazy=True)
     custom_lists = db.relationship('CustomList', backref='user', lazy=True)
     top_items = db.relationship('UserTopItem', backref='user', lazy=True)
+    showcases = db.relationship('Showcase', backref='user', cascade='all, delete-orphan', lazy=True)
 
     def __repr__(self):
         return f'<User {self.username}>'
@@ -45,8 +46,13 @@ class RelatedMedia(db.Model):
     __tablename__ = 'related_medias'
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    original_api_id = db.Column(db.String(255), nullable=False)
+    original_api_id_1 = db.Column(db.String(255), nullable=False, index=True)
+    original_api_id_2 = db.Column(db.String(255), nullable=False, index=True)
     media_relation_type_id = db.Column(db.Integer, db.ForeignKey('media_relation_type.id'), nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('original_api_id_1', 'original_api_id_2', name='_related_pair_uc'),
+    )
 
 
 class MediaType(db.Model):
@@ -69,7 +75,6 @@ class Media(db.Model):
     banner_url = db.Column(db.Text, nullable=True)
     average_rating = db.Column(db.Float, nullable=False, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    related_media = db.Column(db.Integer, db.ForeignKey('related_medias.id'), nullable=False)
 
 
 class UserMedia(db.Model):
@@ -142,4 +147,36 @@ class UserTopItem(db.Model):
     __table_args__ = (
         db.UniqueConstraint('top_id', 'media_id', name='_top_media_uc'),
         db.UniqueConstraint('top_id', 'position', name='_top_position_uc'),
+    )
+
+
+class Showcase(db.Model):
+    __tablename__ = 'showcases'
+
+    id = db.Column(db.String(255), primary_key=True)
+    user_id = db.Column(db.String(255), db.ForeignKey('users.id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    showcase_type = db.Column(db.String(50), nullable=False)  # 'list' or 'review'
+    position = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=True, onupdate=datetime.utcnow)
+
+    items = db.relationship('ShowcaseItem', backref='showcase', cascade='all, delete-orphan', lazy=True)
+
+
+class ShowcaseItem(db.Model):
+    __tablename__ = 'showcase_items'
+
+    id = db.Column(db.String(255), primary_key=True)
+    showcase_id = db.Column(db.String(255), db.ForeignKey('showcases.id'), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    list_id = db.Column(db.String(255), db.ForeignKey('lists.id'), nullable=True)
+    user_media_id = db.Column(db.String(255), db.ForeignKey('user_media.id'), nullable=True)
+
+    # Ensure at least one reference is set
+    __table_args__ = (
+        db.CheckConstraint(
+            '(list_id IS NOT NULL) OR (user_media_id IS NOT NULL)',
+            name='_showcase_item_ref_ck'
+        ),
     )
